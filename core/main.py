@@ -1,4 +1,11 @@
-from fastapi import FastAPI
+from fastapi import (
+    FastAPI,
+    Query,
+    status,
+    HTTPException,
+    Path
+)
+from fastapi.responses import JSONResponse
 # import uvicorn
 
 
@@ -14,16 +21,21 @@ names_list = [
 
 @app.get("/")
 def index():
-    return {
-        "message": "Hello World!"
-        }
+    return JSONResponse(
+        content={"detail": "Hello World!"},
+        status_code=status.HTTP_202_ACCEPTED
+    )
 
 # /names (GET(Retrieve), POST(Create))
-@app.get("/names")
-def retrieve_names_list():
+@app.get("/names", status_code=status.HTTP_200_OK)
+def retrieve_names_list(q: str | None = Query(default=None, max_length=20, alias="search")):
+    if q:
+        return [
+            item for item in names_list if item["name"] == q
+        ]
     return names_list
 
-@app.post("/names")
+@app.post("/names", status_code=status.HTTP_201_CREATED)
 def create_name(name:str):
     name_obj = {
         "id": names_list[-1]["id"] + 1,
@@ -33,28 +45,46 @@ def create_name(name:str):
     return {"result": name_obj}
 
 # /names/:id (GET(Retrieve), PUT/PATCH(Update), DELETE)
-@app.get("/names/{name_id}")
-def retrieve_name_detail(name_id:int):
+@app.get("/names/{name_id}", status_code=status.HTTP_200_OK)
+def retrieve_name_detail(
+    name_id: int = Path(
+        alias="object_id",
+        title="object id",
+        description="The id of the name in names_list"
+        )
+    ):
     for name in names_list:
         if name["id"] == name_id:
             return name
-    return {"detail": "object not found"}
+    raise HTTPException(
+        detail="object not found",
+        status_code=status.HTTP_404_NOT_FOUND
+    )
 
-@app.put("/names/{name_id}")
+@app.put("/names/{name_id}", status_code=status.HTTP_200_OK)
 def update_name_detail(name_id:int, new_name:str):
     for item in names_list:
         if item["id"] == name_id:
             item["name"] = new_name
             return {"item_updated": item}
-    return {"detail": "object not found"}
+    raise HTTPException(
+        detail="object not found",
+        status_code=status.HTTP_404_NOT_FOUND
+    )
 
 @app.delete("/names/{name_id}")
 def delete_name_detail(name_id:int):
     for item in names_list:
         if item["id"] == name_id:
             names_list.remove(item)
-            return {"detail": "object removed successfully"}
-    return {"detail": "object not found"}
+            return JSONResponse(
+                content={"detail": "object removed successfully"},
+                status_code=status.HTTP_204_NO_CONTENT
+            )
+    raise HTTPException(
+        detail="object not found",
+        status_code=status.HTTP_404_NOT_FOUND
+    )
         
 # if __name__ == "__main__":
 #     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
