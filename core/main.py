@@ -10,6 +10,7 @@ from fastapi import (
     File,
     UploadFile,
 )
+from dataclasses import dataclass
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 # import uvicorn
@@ -57,14 +58,28 @@ def retrieve_names_list(q: str | None = Query(default=None, max_length=20, alias
         ]
     return names_list
 
-@app.post("/names", status_code=status.HTTP_201_CREATED)
-def create_name(name: str = Body(embed=True)):
+@dataclass
+class Student:
+    name: str
+    age: int | None = None
+    
+@dataclass
+class StudentResponse:
+    id: int
+    name: str
+
+@app.post(
+    "/names",
+    status_code=status.HTTP_201_CREATED,
+    response_model=StudentResponse
+    )
+def create_name(student: Student):
     name_obj = {
         "id": names_list[-1]["id"] + 1,
-        "name": name
+        "name": student.name
     }
     names_list.append(name_obj)
-    return {"result": name_obj}
+    return name_obj
 
 # /names/:id (GET(Retrieve), PUT/PATCH(Update), DELETE)
 @app.get("/names/{name_id}", status_code=status.HTTP_200_OK)
