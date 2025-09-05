@@ -6,14 +6,18 @@ from fastapi import (
     HTTPException,
     Path,
     Form,
-    Body,
     File,
     UploadFile,
 )
-from dataclasses import dataclass
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 # import uvicorn
+
+from schemas import (
+    PersonCreateSchema,
+    PersonUpdateSchema,
+    PersonResponseSchema
+)
 
 
 names_list = [
@@ -23,15 +27,6 @@ names_list = [
     {"id": 4, "name": "Abbas"},
     {"id": 5, "name": "Mohsen"},
 ]
-
-# Events of FastAPI
-# @app.on_event("startup")
-# async def startup_event():
-#     print("starting the application")
-
-# @app.on_event("shutdown")
-# async def shutdown_event():
-#     print("shutting down the application")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,7 +45,11 @@ def index():
     )
 
 # /names (GET(Retrieve), POST(Create))
-@app.get("/names", status_code=status.HTTP_200_OK)
+@app.get(
+    "/names",
+    status_code=status.HTTP_200_OK,
+    response_model=List[PersonResponseSchema]
+    )
 def retrieve_names_list(q: str | None = Query(default=None, max_length=20, alias="search")):
     if q:
         return [
@@ -58,22 +57,12 @@ def retrieve_names_list(q: str | None = Query(default=None, max_length=20, alias
         ]
     return names_list
 
-@dataclass
-class Student:
-    name: str
-    age: int | None = None
-    
-@dataclass
-class StudentResponse:
-    id: int
-    name: str
-
 @app.post(
     "/names",
     status_code=status.HTTP_201_CREATED,
-    response_model=StudentResponse
+    response_model=PersonResponseSchema
     )
-def create_name(student: Student):
+def create_name(student: PersonCreateSchema):
     name_obj = {
         "id": names_list[-1]["id"] + 1,
         "name": student.name
@@ -82,35 +71,42 @@ def create_name(student: Student):
     return name_obj
 
 # /names/:id (GET(Retrieve), PUT/PATCH(Update), DELETE)
-@app.get("/names/{name_id}", status_code=status.HTTP_200_OK)
+@app.get(
+    "/names/{name_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=PersonResponseSchema
+    )
 def retrieve_name_detail(
     name_id: int = Path(
-        alias="object_id",
         title="object id",
         description="The id of the name in names_list"
         )
     ):
-    for name in names_list:
-        if name["id"] == name_id:
-            return name
+    for item in names_list:
+        if item["id"] == name_id:
+            return item
     raise HTTPException(
         detail="object not found",
         status_code=status.HTTP_404_NOT_FOUND
     )
 
-@app.put("/names/{name_id}", status_code=status.HTTP_200_OK)
-def update_name_detail(name_id: int = Path(), new_name: str = Form()):
+@app.put(
+    "/names/{name_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=PersonResponseSchema
+    )
+def update_name_detail(person: PersonUpdateSchema ,name_id: int = Path()):
     for item in names_list:
         if item["id"] == name_id:
-            item["name"] = new_name
-            return {"item_updated": item}
+            item["name"] = person.name
+            return item
     raise HTTPException(
         detail="object not found",
         status_code=status.HTTP_404_NOT_FOUND
     )
 
 @app.delete("/names/{name_id}")
-def delete_name_detail(name_id:int):
+def delete_name_detail(name_id: int):
     for item in names_list:
         if item["id"] == name_id:
             names_list.remove(item)
