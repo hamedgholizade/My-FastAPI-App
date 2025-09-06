@@ -1,13 +1,21 @@
+from datetime import datetime
 from sqlalchemy import (
     create_engine,
     Column,
     Integer,
     String,
-    Boolean
+    Boolean,
+    ForeignKey,
+    Text,
+    DateTime,
+    Table,
+    UniqueConstraint
 )
 from sqlalchemy.orm import (
     sessionmaker,
-    declarative_base
+    declarative_base,
+    relationship,
+    backref
 )
 
 
@@ -32,50 +40,126 @@ SessionLocal = sessionmaker(
 # create base class for declaring tables
 Base = declarative_base()
 
-class User(Base):
-    __tablename__ = "users"
+
+class AbstractBase(Base):
+    """
+    Simple base abstract class model
+    """
+    __abstract__ = True
+    
     id = Column(Integer, primary_key=True, autoincrement=True)
-    first_name = Column(String(length=30))
-    last_name = Column(String(length=30), nullable=True)
-    age = Column(Integer)
+    created_at = Column(DateTime(), default=datetime.now)
+    updated_at = Column(DateTime(), default=datetime.now, onupdate=datetime.now)
+
+
+enrollments = Table(
+    "enrollments",
+    AbstractBase.metadata,
+    Column("post_id", Integer, ForeignKey("posts.id")),
+    Column("tag_id", Integer, ForeignKey("tags.id")),
+    UniqueConstraint("post_id", "tag_id", name="post_tag_enrolled")
+)
+
+class User(AbstractBase):
+    """
+    Simple user class model 
+    """
+    __tablename__ = "users"
+    
+    username = Column(String(length=50))
+    email = Column(String())
+    password = Column(String())
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     
+    addresses = relationship("Address", backref="user")
+    posts = relationship("Post", backref="user")
+    comments = relationship("Comment", backref="user")
+    profile = relationship("Profile", backref="user", uselist=False)
+    
     def __repr__(self):
-        return f"User(id={self.id}, first_name={self.first_name}, last_name={self.last_name})"
+        return f"User(id={self.id}, username={self.username}, email={self.email})"
+    
+
+class Address(AbstractBase):
+    """
+    Simple Address class model
+    this table has One:Many relationship with users table
+    """
+    __tablename__ = "addresses"
+    
+    user_id = Column(Integer, ForeignKey("users.id"))
+    city = Column(String())
+    state = Column(String())
+    zip_code = Column(String())
+    
+    def __repr__(self):
+        return f"Address(id={self.id}, user_id={self.user_id}, city={self.city})"
+
+
+class Profile(AbstractBase):
+    """
+    Simple Profile class model
+    this table has One:One relationship with users table
+    """
+    __tablename__ = "profiles"
+    
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    first_name = Column(String())
+    last_name = Column(String())
+    bio = Column(Text(), nullable=True)
+    
+    def __repr__(self):
+        return f"Profile(id={self.id}, first_name={self.first_name}, last_name={self.last_name})"
+
+
+class Post(AbstractBase):
+    """
+    Simple Post class model
+    this table has One:Many relationship with users table
+    """
+    __tablename__ = "posts"
+    
+    user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String())
+    content = Column(Text())
+    
+    comments = relationship("Comment", backref="post")
+    tags = relationship("Tag", secondary=enrollments, back_populates="posts")
+    
+    def __repr__(self):
+        return f"Post(id={self.id}, title={self.title})"
+    
+    
+class Comment(AbstractBase):
+    """
+    Simple Comment class model
+    this table has One:Many relationship with users, posts tables
+    """
+    __tablename__ = "comments"
+    
+    user_id = Column(Integer, ForeignKey("users.id"))
+    post_id = Column(Integer, ForeignKey("posts.id"))
+    parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
+    message = Column(Text())
+    
+    # parent = relationship("Comment", back_populates="children", remote_side="Comment.id")
+    # children = relationship("Comment", back_populates="parent")
+    children = relationship("Comment", backref=backref("parent", remote_side="Comment.id"))
+    
+    def __repr__(self):
+        return f"Comment(id={self.id}, message={self.message})"
+    
+    
+class Tag(AbstractBase):
+    __tablename__ = "tags"
+    
+    name = Column(String())
+    posts = relationship("Post", secondary=enrollments, back_populates="tags")
+    
+    def __repr__(self):
+        return f"Tag(id={self.id}, name={self.name})"
+    
 
 # to create tables and database
-Base.metadata.create_all(engine)
-
-session = SessionLocal()
-
-# Inserting adata(create)
-# hamed = User(first_name="mohsen", last_name="golriz", age=34)
-# session.add(hamed)
-# session.commit()
-
-# bulk insert(bulk_create)
-# mohsen = User(first_name="mohsen", last_name="golriz", age=34)
-# zahra = User(first_name="zahra", last_name="fadai", age=23)
-# session.add_all([mohsen, zahra])
-# session.commit()
-
-# retrieve all data(get-list)
-# users = session.query(User).all()
-# print(type(users), users)
-# print([user.age for user in users])
-
-# retrieve data(get-detail)
-# user = session.query(User).filter_by(first_name="hamed").first()
-# print(user, type(user))
-
-# updating a record of data(PUT/PATCH)
-# user.last_name = "gholizade"
-# session.commit()
-
-# delete a record of data(DELETE)
-# if user:
-#     session.delete(user)
-#     session.commit()
-# else:
-#     print("user does not exist")
+Base.metadata.create_all(bind=engine)
