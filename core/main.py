@@ -5,12 +5,13 @@ from fastapi import (
     status,
     HTTPException,
     Path,
-    Form,
     File,
     UploadFile,
+    Depends
 )
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from sqlalchemy.orm import Session
 # import uvicorn
 
 from schemas import (
@@ -18,19 +19,18 @@ from schemas import (
     PersonUpdateSchema,
     PersonResponseSchema
 )
+from database import (
+    Base,
+    engine,
+    get_db,
+    Person
+)
 
-
-names_list = [
-    {"id": 1, "name": "Ali"},
-    {"id": 2, "name": "Hamed"},
-    {"id": 3, "name": "Majid"},
-    {"id": 4, "name": "Abbas"},
-    {"id": 5, "name": "Mohsen"},
-]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Application starting up")
+    Base.metadata.create_all(bind=engine)
     yield
     print("Application shutting down")
 
@@ -50,25 +50,29 @@ def index():
     status_code=status.HTTP_200_OK,
     response_model=List[PersonResponseSchema]
     )
-def retrieve_names_list(q: str | None = Query(default=None, max_length=20, alias="search")):
+def retrieve_names_list(
+    q: str | None = Query(default=None,max_length=20,alias="search"),
+    db: Session = Depends(get_db)
+    ):
+    query = db.query(Person)
     if q:
-        return [
-            item for item in names_list if item["name"] == q
-        ]
-    return names_list
+        query = query.filter_by(name=q)
+    result = query.all()
+    return result
 
 @app.post(
     "/names",
     status_code=status.HTTP_201_CREATED,
     response_model=PersonResponseSchema
     )
-def create_name(student: PersonCreateSchema):
-    name_obj = {
-        "id": names_list[-1]["id"] + 1,
-        "name": student.name
-    }
-    names_list.append(name_obj)
-    return name_obj
+def create_name(
+    requset: PersonCreateSchema,
+    db: Session = Depends(get_db)
+    ):
+    new_person = Person(name=requset.name)
+    db.add(new_person)
+    db.commit()
+    return new_person
 
 # /names/:id (GET(Retrieve), PUT/PATCH(Update), DELETE)
 @app.get(
@@ -79,12 +83,13 @@ def create_name(student: PersonCreateSchema):
 def retrieve_name_detail(
     name_id: int = Path(
         title="object id",
-        description="The id of the name in names_list"
-        )
+        description="The id of the name"
+        ),
+    db: Session = Depends(get_db)
     ):
-    for item in names_list:
-        if item["id"] == name_id:
-            return item
+    person = db.query(Person).filter_by(id=name_id).one_or_none()
+    if person:
+        return person
     raise HTTPException(
         detail="object not found",
         status_code=status.HTTP_404_NOT_FOUND
@@ -95,25 +100,32 @@ def retrieve_name_detail(
     status_code=status.HTTP_200_OK,
     response_model=PersonResponseSchema
     )
-def update_name_detail(person: PersonUpdateSchema ,name_id: int = Path()):
-    for item in names_list:
-        if item["id"] == name_id:
-            item["name"] = person.name
-            return item
+def update_name_detail(
+    request: PersonUpdateSchema,
+    name_id: int = Path(),
+    db: Session = Depends(get_db)
+    ):
+    person = db.query(Person).filter_by(id=name_id).one_or_none()
+    if person:
+        person.name = request.name
+        db.commit()
+        db.refresh(person)
+        return person
     raise HTTPException(
         detail="object not found",
         status_code=status.HTTP_404_NOT_FOUND
     )
 
 @app.delete("/names/{name_id}")
-def delete_name_detail(name_id: int):
-    for item in names_list:
-        if item["id"] == name_id:
-            names_list.remove(item)
-            return JSONResponse(
-                content={"detail": "object removed successfully"},
-                status_code=status.HTTP_204_NO_CONTENT
-            )
+def delete_name_detail(name_id: int, db: Session = Depends(get_db)):
+    person = db.query(Person).filter_by(id=name_id).one_or_none()
+    if person:
+        db.delete(person)
+        db.commit()
+        return JSONResponse(
+            content={"detail": "object removed successfully"},
+            status_code=status.HTTP_204_NO_CONTENT
+        )
     raise HTTPException(
         detail="object not found",
         status_code=status.HTTP_404_NOT_FOUND

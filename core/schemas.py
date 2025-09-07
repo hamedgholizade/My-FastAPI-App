@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import (
     BaseModel,
     field_validator,
@@ -35,7 +36,14 @@ class PersonResponseSchema(BasePersonSchema):
         ...,
         description="Unique user identifier"
     )
-    
+    created_at: datetime = Field(
+        ...,
+        description="Record creation timestamp"
+    )
+    updated_at: datetime = Field(
+        ...,
+        description="Record updating timestamp"
+    )
     
 class PersonCreateSchema(BasePersonSchema):
     pass
